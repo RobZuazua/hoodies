@@ -13,19 +13,24 @@ contract Governance {
         bool voted;     // is vote already cast for given election
     }
 
-    mapping(bytes32 => Proposal[]) public elections; // Map election name to list of proposals
+    mapping(bytes32 => Proposal[]) private _elections; // Map election name to list of proposals
 
-    mapping(address => mapping(bytes32 => Vote)) public voters; // Map users to map of election names to Vote
+    mapping(address => mapping(bytes32 => Vote)) private _voters; // Map users to map of election names to Vote
 
     uint256 MAX_INT = 115792089237316195423570985008687907853269984665640564039457584007913129639935;
 
+    // Public getter for testing / reading proposals for given election
+    function getProposals(bytes32 electionName) public view returns (Proposal[] memory p) {
+        p = _elections[electionName];
+    }
+
     function addProposalsToElection(bytes32 electionName, bytes32[] memory proposalNames) public {
-        Proposal[] storage proposals = elections[electionName];
+        Proposal[] storage proposals = _elections[electionName];
 
         // Create new proposals
         for (uint i = 0; i < proposalNames.length; i++) {
             // Iterate through proposals each time (assuming very few proposals per election)
-            require(findProposalIndex(proposalNames[i], proposals) != MAX_INT, "Proposal name already exists.");
+            require(findProposalIndex(proposalNames[i], proposals) == MAX_INT, "Proposal name already exists.");
             
             // Push new proposal to storage
             proposals.push(Proposal({
@@ -47,7 +52,7 @@ contract Governance {
 
     function vote(bytes32 electionName, bytes32 proposalName) public {
         // Get users current vote for this election
-        Vote storage currentVote = voters[msg.sender][electionName];
+        Vote storage currentVote = _voters[msg.sender][electionName];
 
         // If user hasnt voted, set voted to true
         require(!currentVote.voted, "Already voted.");
@@ -55,11 +60,11 @@ contract Governance {
         currentVote.proposalName = proposalName;
 
         // Find the proposal that the user is voting for
-        uint proposalIndex = findProposalIndex(proposalName, elections[electionName]);
+        uint proposalIndex = findProposalIndex(proposalName, _elections[electionName]);
         require(proposalIndex != MAX_INT, "Proposal not found.");
 
         // Update Vote Count
-        elections[electionName][proposalIndex].voteCount += 1;
+        _elections[electionName][proposalIndex].voteCount += 1;
     }
 
     /// @dev Computes the winning proposal taking all
@@ -67,7 +72,7 @@ contract Governance {
     function winningProposal(bytes32 electionName) public view
             returns (uint winningProposal_)
     {
-        Proposal[] storage proposals = elections[electionName];
+        Proposal[] storage proposals = _elections[electionName];
         uint winningVoteCount = 0;
         for (uint p = 0; p < proposals.length; p++) {
             if (proposals[p].voteCount > winningVoteCount) {
@@ -83,6 +88,6 @@ contract Governance {
     function winnerName(bytes32 electionName) public view
             returns (bytes32 winnerName_)
     {
-        winnerName_ = elections[electionName][winningProposal(electionName)].name;
+        winnerName_ = _elections[electionName][winningProposal(electionName)].name;
     }
 }
