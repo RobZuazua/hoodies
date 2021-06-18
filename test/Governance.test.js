@@ -12,23 +12,27 @@ const PROPOSAL_2_NAME = web3.utils.rightPad(web3.utils.toHex("Why don't they eat
 const Governance = contract.fromArtifact('Governance');
 
 describe('Test creating elections and proposals', function () {
-  const [ owner ] = accounts;
+  const [ owner, voter2, voter3, voter4 ] = accounts;
 
   beforeEach(async function() {
     this.governance = await Governance.new({ from: owner });
   });
 
-  it('Non-existant election should have no proposals', async function () {
+  it('Non-existant election should have no proposals. Cant vote. No Winner.', async function () {
     expect(await this.governance.getProposals(ELECTION_1_NAME)).to.be.an('array').that.is.empty;
+    await expectRevert(this.governance.vote(ELECTION_1_NAME, PROPOSAL_1_NAME), "Proposal not found.");
+    await expectRevert(this.governance.winnerName(ELECTION_1_NAME), "No proposals found.");
   });
 
-  it('Add zero proposals to election', async function () {
+  it('Add zero proposals to election. Cant vote. No Winner.', async function () {
     await this.governance.addProposalsToElection(ELECTION_1_NAME, []);
     const proposals = await this.governance.getProposals(ELECTION_1_NAME);
     expect(proposals).to.be.an('array').that.is.empty;
+    await expectRevert(this.governance.vote(ELECTION_1_NAME, PROPOSAL_1_NAME), "Proposal not found.");
+    await expectRevert(this.governance.winnerName(ELECTION_1_NAME), "No proposals found.");
   });
 
-  it('Add single proposal to election', async function () {
+  it('Add single proposal to election. Vote. Declare Winner.', async function () {
     await this.governance.addProposalsToElection(ELECTION_1_NAME, [PROPOSAL_1_NAME]);
     const proposals = await this.governance.getProposals(ELECTION_1_NAME);
     expect(proposals).to.be.an('array').to.have.lengthOf(1);
@@ -37,6 +41,59 @@ describe('Test creating elections and proposals', function () {
         expect(name).to.equal(PROPOSAL_1_NAME);
         expect(voteCount).to.equal('0');
     }
+
+    await this.governance.vote(ELECTION_1_NAME, PROPOSAL_1_NAME);
+    expect(await this.governance.winnerName(ELECTION_1_NAME)).to.equal(PROPOSAL_1_NAME);
+  });
+
+  it('Voting twice should fail.', async function () {
+    await this.governance.addProposalsToElection(ELECTION_1_NAME, [PROPOSAL_1_NAME]);
+    const proposals = await this.governance.getProposals(ELECTION_1_NAME);
+    expect(proposals).to.be.an('array').to.have.lengthOf(1);
+    for (const proposal of proposals) {
+        const [name, voteCount] = proposal; // destructure array
+        expect(name).to.equal(PROPOSAL_1_NAME);
+        expect(voteCount).to.equal('0');
+    }
+
+    await this.governance.vote(ELECTION_1_NAME, PROPOSAL_1_NAME);
+    await expectRevert(this.governance.vote(ELECTION_1_NAME, PROPOSAL_1_NAME), "Already voted.");
+
+    expect(await this.governance.winnerName(ELECTION_1_NAME)).to.equal(PROPOSAL_1_NAME);
+  });
+
+  it('Fail first vote. Succeed second vote.', async function () {
+    await this.governance.addProposalsToElection(ELECTION_1_NAME, [PROPOSAL_1_NAME]);
+    const proposals = await this.governance.getProposals(ELECTION_1_NAME);
+    expect(proposals).to.be.an('array').to.have.lengthOf(1);
+    for (const proposal of proposals) {
+        const [name, voteCount] = proposal; // destructure array
+        expect(name).to.equal(PROPOSAL_1_NAME);
+        expect(voteCount).to.equal('0');
+    }
+
+    await expectRevert(this.governance.vote(ELECTION_1_NAME, PROPOSAL_2_NAME), "Proposal not found.");
+    await this.governance.vote(ELECTION_1_NAME, PROPOSAL_1_NAME);
+
+    expect(await this.governance.winnerName(ELECTION_1_NAME)).to.equal(PROPOSAL_1_NAME);
+  });
+
+  it('Many people vote for same proposal.', async function () {
+    await this.governance.addProposalsToElection(ELECTION_1_NAME, [PROPOSAL_1_NAME]);
+    await this.governance.vote(ELECTION_1_NAME, PROPOSAL_1_NAME);
+    await this.governance.vote(ELECTION_1_NAME, PROPOSAL_1_NAME, { from: voter2 });
+    await this.governance.vote(ELECTION_1_NAME, PROPOSAL_1_NAME, { from: voter3 });
+    await this.governance.vote(ELECTION_1_NAME, PROPOSAL_1_NAME, { from: voter4 });
+
+    const proposals = await this.governance.getProposals(ELECTION_1_NAME);
+    expect(proposals).to.be.an('array').to.have.lengthOf(1);
+    for (const proposal of proposals) {
+        const [name, voteCount] = proposal; // destructure array
+        expect(name).to.equal(PROPOSAL_1_NAME);
+        expect(voteCount).to.equal('4');
+    }
+
+    expect(await this.governance.winnerName(ELECTION_1_NAME)).to.equal(PROPOSAL_1_NAME);
   });
 
   it('Add two proposals to election', async function () {
@@ -49,6 +106,8 @@ describe('Test creating elections and proposals', function () {
         expect(voteCount).to.equal('0');
     }
   });
+
+// TODO: Add tests (and fix code for vote tie)
 
   it('Add same proposal to election', async function () {
     await expectRevert(this.governance.addProposalsToElection(ELECTION_1_NAME, [PROPOSAL_1_NAME, PROPOSAL_1_NAME]), "Proposal name already exists.");

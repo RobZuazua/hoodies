@@ -69,10 +69,12 @@ contract Governance {
 
     /// @dev Computes the winning proposal taking all
     /// previous votes into account.
-    function winningProposal(bytes32 electionName) public view
+    function winningProposal(bytes32 electionName) private view
             returns (uint winningProposal_)
     {
         Proposal[] storage proposals = _elections[electionName];
+        require(proposals.length > 0, "No proposals found.");
+
         uint winningVoteCount = 0;
         for (uint p = 0; p < proposals.length; p++) {
             if (proposals[p].voteCount > winningVoteCount) {
